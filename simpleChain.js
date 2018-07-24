@@ -17,10 +17,6 @@ class Block {
     this.previousBlockHash = '';
   }
 
-  clone() {
-    return new Block(this.body);
-  }
-
   calculateHash() {
     const hash = SHA256(JSON.stringify(this)).toString();
     return hash;
@@ -68,9 +64,11 @@ class Blockchain {
         // read all blocks into the variable "chain"
         let chain = [];
         this.db.createReadStream()
-        .on('data', data => {
+        .on('data', raw => {
+          const key = parseInt(raw.key);
+          const data = JSON.parse(raw.value);
           data.__proto__ = Block.prototype;
-          chain.push(data);
+          chain[key] = data;
         })
         .on('error', err => console.log("Error when reading LevelDB: ", err))
         .on('close', () => console.log("Stream closed"))
@@ -103,7 +101,7 @@ class Blockchain {
     // throw error if not ready
     this._isReady();
     // clone it (we don't want side-effects)
-    const newBlock = aBlock.clone();
+    const newBlock = new Block(aBlock.body);
     // Block height
     newBlock.height = this.chain.length;
     // UTC timestamp
@@ -117,12 +115,16 @@ class Blockchain {
     // Adding block object to chain
     this.chain.push(newBlock);
     // and persist to LevelDB
-    this.db.put(newBlock.height, newBlock, function(err) {
-      if (err) {
-        console.log('Block ' + key + ' submission failed', err);
-        throw err;
+    this.db.put(
+      newBlock.height,
+      JSON.stringify(newBlock),
+      function(err) {
+        if (err) {
+          console.log('Block ' + key + ' submission failed', err);
+          throw err;
+        }
       }
-    });
+    );
   }
   
   /**
